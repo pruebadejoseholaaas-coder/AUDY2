@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Subir volumen – editor de audio</title>
+<link href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#e9ece4;--panel:#f6f7f2;--ink:#1d2a24;--mute:#5d6b63;--line:#c9cfc3;--wave:#2f6f5e;--hot:#d6402b;--sel:rgba(47,111,94,.22);--btn:#1d2a24;--btnink:#f6f7f2;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);color-scheme:light}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#121815;--panel:#1b241f;--ink:#e6ebe4;--mute:#92a097;--line:#2f3b34;--wave:#5fc2a3;--hot:#ff6a52;--sel:rgba(95,194,163,.25);--btn:#e6ebe4;--btnink:#121815;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#121815;--panel:#1b241f;--ink:#e6ebe4;--mute:#92a097;--line:#2f3b34;--wave:#5fc2a3;--hot:#ff6a52;--sel:rgba(95,194,163,.25);--btn:#e6ebe4;--btnink:#121815;color-scheme:dark}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:400 16px/1.5 "Familjen Grotesk",system-ui,sans-serif}
+main{max-width:920px;margin:0 auto;padding:20px 16px 40px}
+h1{font-size:clamp(28px,6vw,44px);line-height:1.05;margin:8px 0 4px;font-weight:700;letter-spacing:-.02em}
+.sub{color:var(--mute);margin:0 0 20px;max-width:60ch}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:14px}
+#drop{border:2px dashed var(--line);text-align:center;padding:36px 16px;cursor:pointer}
+#drop.over{border-color:var(--wave);background:var(--sel)}
+#drop strong{font-size:20px}
+#wrap{position:relative;height:170px;touch-action:none;cursor:text;user-select:none}
+canvas{position:absolute;inset:0;width:100%;height:100%}
+#selbox{position:absolute;top:0;bottom:0;background:var(--sel);border-left:2px solid var(--wave);border-right:2px solid var(--wave);display:none}
+#head{position:absolute;top:0;bottom:0;width:2px;background:var(--ink)}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+button,select{font:600 15px "Familjen Grotesk",system-ui,sans-serif;border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:9px 14px;border-radius:8px;cursor:pointer}
+button.main{background:var(--btn);color:var(--btnink);border-color:var(--btn)}
+button:disabled{opacity:.4;cursor:not-allowed}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:3px solid var(--wave);outline-offset:2px}
+.time{margin-left:auto;font-variant-numeric:tabular-nums;color:var(--mute)}
+h2{font-size:18px;margin:0 0 10px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media(max-width:720px){.grid{grid-template-columns:1fr}}
+input[type=range]{width:100%;accent-color:var(--wave)}
+.big{font-size:34px;font-weight:700;font-variant-numeric:tabular-nums}
+#warn{color:var(--hot);font-weight:600;min-height:24px}
+#msg{min-height:24px;color:var(--mute)}
+label.chk{display:flex;gap:8px;align-items:center}
+.hide{display:none}
+</style>
+</head>
+<body>
+<main>
+<h1>Sube el volumen de cualquier audio</h1>
+<p class="sub">Carga un archivo, súbele el volumen sin que se distorsione, edítalo y expórtalo. Todo ocurre en tu dispositivo: el audio no se sube a ningún servidor.</p>
+
+<div class="card" id="drop" tabindex="0" role="button" aria-label="Elegir archivo de audio">
+<strong>Arrastra un audio aquí o toca para elegirlo</strong><br>
+<span class="sub">MP3, WAV, M4A, OGG, FLAC, AAC y también el audio de archivos de video, según lo que soporte tu navegador.</span>
+<input id="file" type="file" accept="audio/*,video/*,.mp3,.wav,.m4a,.ogg,.flac,.aac,.opus,.weba,.mp4,.webm,.mov" class="hide">
+</div>
+<div id="msg" role="status"></div>
+
+<section id="editor" class="hide">
+<div class="card">
+<div id="wrap"><canvas id="cv"></canvas><div id="selbox"></div><div id="head"></div></div>
+<p class="sub" style="margin:8px 0 12px">Arrastra sobre la onda para seleccionar un tramo. Toca una vez para colocar el cursor. La onda se dibuja con el volumen aplicado; en rojo, lo que se distorsionaría.</p>
+<div class="row">
+<button class="main" id="play">Reproducir</button>
+<button id="stop">Detener</button>
+<label class="chk"><input type="checkbox" id="loop"> Repetir selección</label>
+<span class="time" id="time">0:00.0 / 0:00.0</span>
+</div>
+</div>
+
+<div class="grid">
+<div class="card">
+<h2>Volumen</h2>
+<div class="big" id="gv">100%</div>
+<input type="range" id="gain" min="0" max="800" value="100" aria-label="Volumen en porcentaje">
+<div id="warn" role="status"></div>
+<div class="row" style="margin-bottom:8px">
+<button id="norm">Normalizar al máximo</button>
+<button id="reset">Volver a 100%</button>
+</div>
+<label class="chk"><input type="checkbox" id="lim" checked> Limitador (evita la distorsión)</label>
+<p class="sub" id="peak" style="margin:8px 0 0"></p>
+</div>
+
+<div class="card">
+<h2>Edición</h2>
+<div class="row">
+<button id="trim">Recortar a selección</button>
+<button id="cut">Borrar selección</button>
+<button id="fin">Fade in</button>
+<button id="fout">Fade out</button>
+<button id="rev">Invertir</button>
+<select id="spd" aria-label="Velocidad"><option value="">Velocidad…</option><option value="0.5">0.5×</option><option value="0.75">0.75×</option><option value="1.25">1.25×</option><option value="1.5">1.5×</option><option value="2">2×</option></select>
+<button id="undo">Deshacer</button>
+</div>
+<p class="sub" style="margin:8px 0 0">Fade, invertir y velocidad actúan sobre la selección o, si no hay, sobre todo el audio. Cambiar la velocidad también cambia el tono.</p>
+</div>
+</div>
+
+<div class="card">
+<h2>Exportar</h2>
+<div class="row"><select id="fmt" aria-label="Formato de exportación"><option value="mp3-192">MP3 · 192 kbps</option><option value="mp3-128">MP3 · 128 kbps</option><option value="mp3-320">MP3 · 320 kbps</option><option value="wav">WAV · sin pérdida</option></select><button class="main" id="exp">Exportar con el volumen aplicado</button><button id="newf">Abrir otro archivo</button></div>
+<p class="sub" id="expnote" style="margin:8px 0 0">El archivo se descarga directamente en el formato que elijas. El MP3 es más liviano; el WAV conserva toda la calidad.</p>
+</div>
+</section>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/lamejs/1.2.1/lame.min.js"></script>
+<script>
+(function(){
+const $=id=>document.getElementById(id);
+const AC=new (window.AudioContext||window.webkitAudioContext)();
+let buf=null,undo=[],sel=null,cursor=0,gain=1,src=null,gnode=null,comp=null,t0=0,off=0,endAt=0,playing=false,raf=0,cols=null,colsW=0,fname='audio';
+const fmt=s=>{s=Math.max(0,s);return Math.floor(s/60)+':'+(s%60).toFixed(1).padStart(4,'0')};
+const say=t=>$('msg').textContent=t||'';
+
+/* ---------- carga ---------- */
+const drop=$('drop'),fi=$('file');
+drop.onclick=()=>fi.click();
+drop.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();fi.click()}};
+$('newf').onclick=()=>fi.click();
+fi.onchange=()=>fi.files[0]&&load(fi.files[0]);
+['dragover','dragenter'].forEach(n=>document.addEventListener(n,e=>{e.preventDefault();drop.classList.add('over')}));
+['dragleave','drop'].forEach(n=>document.addEventListener(n,e=>{e.preventDefault();drop.classList.remove('over')}));
+document.addEventListener('drop',e=>{const f=e.dataTransfer.files[0];f&&load(f)});
+
+async function load(f){
+  stop();say('Leyendo el archivo…');
+  try{
+    const ab=await f.arrayBuffer();
+    buf=await AC.decodeAudioData(ab);
+    fname=f.name.replace(/\.[^.]+$/,'')||'audio';
+    undo=[];sel=null;cursor=0;gain=1;$('gain').value=100;cols=null;
+    $('editor').classList.remove('hide');say(f.name+' · '+fmt(buf.duration)+' · '+buf.numberOfChannels+' canal(es) · '+buf.sampleRate+' Hz');
+    refresh();
+  }catch(e){say('No se pudo leer este archivo. Prueba con otro formato (MP3, WAV o M4A suelen funcionar en todos los navegadores).')}
+}
+
+/* ---------- utilidades de buffer ---------- */
+const mk=(ch,len,sr)=>new AudioBuffer({numberOfChannels:ch,length:Math.max(1,len),sampleRate:sr});
+function slice(b,s,e){const o=mk(b.numberOfChannels,e-s,b.sampleRate);for(let c=0;c<b.numberOfChannels;c++)o.copyToChannel(b.getChannelData(c).subarray(s,e),c);return o}
+function join(a,b){const o=mk(a.numberOfChannels,a.length+b.length,a.sampleRate);for(let c=0;c<a.numberOfChannels;c++){o.copyToChannel(a.getChannelData(c),c,0);o.copyToChannel(b.getChannelData(c),c,a.length)}return o}
+function peakOf(b){let p=0;for(let c=0;c<b.numberOfChannels;c++){const d=b.getChannelData(c);for(let i=0;i<d.length;i++){const v=Math.abs(d[i]);if(v>p)p=v}}return p}
+const range=()=>{const sr=buf.sampleRate;return sel?[Math.floor(sel.a*sr),Math.floor(sel.b*sr)]:[0,buf.length]};
+function commit(nb){undo.push(buf);if(undo.length>15)undo.shift();buf=nb;sel=null;cursor=Math.min(cursor,buf.duration);cols=null;stop();refresh()}
+
+/* ---------- dibujo ---------- */
+const cv=$('cv'),wrap=$('wrap');
+function computeCols(w){
+  cols=new Float32Array(w);const n=buf.length,step=n/w;
+  for(let x=0;x<w;x++){let m=0;const s=Math.floor(x*step),e=Math.min(n,Math.floor((x+1)*step)+1),k=Math.max(1,Math.floor((e-s)/200));
+    for(let c=0;c<buf.numberOfChannels;c++){const d=buf.getChannelData(c);for(let i=s;i<e;i+=k){const v=Math.abs(d[i]);if(v>m)m=v}}cols[x]=m}
+  colsW=w;
+}
+function draw(){
+  if(!buf)return;
+  const dpr=window.devicePixelRatio||1,w=Math.floor(wrap.clientWidth*dpr),h=Math.floor(wrap.clientHeight*dpr);
+  cv.width=w;cv.height=h;
+  if(!cols||colsW!==w)computeCols(w);
+  const g=cv.getContext('2d'),cs=getComputedStyle(document.documentElement),mid=h/2;
+  g.clearRect(0,0,w,h);
+  g.fillStyle=cs.getPropertyValue('--line');g.fillRect(0,mid,w,1);
+  for(let x=0;x<w;x++){const a=cols[x]*gain;g.fillStyle=a>1?cs.getPropertyValue('--hot'):cs.getPropertyValue('--wave');const hh=Math.min(1,a)*mid;g.fillRect(x,mid-hh,1,Math.max(1,hh*2))}
+  placeOverlay();
+}
+function placeOverlay(){
+  const d=buf.duration,sb=$('selbox');
+  if(sel){sb.style.display='block';sb.style.left=sel.a/d*100+'%';sb.style.width=(sel.b-sel.a)/d*100+'%'}else sb.style.display='none';
+  const p=playing?curPos():cursor;$('head').style.left=Math.min(100,p/d*100)+'%';
+  $('time').textContent=fmt(p)+' / '+fmt(d);
+}
+window.addEventListener('resize',()=>{cols=null;draw()});
+function refresh(){draw();updGain();$('undo').disabled=!undo.length;['trim','cut'].forEach(i=>$(i).disabled=!sel)}
+
+/* ---------- selección ---------- */
+let dragging=false,anchor=0;
+const tAt=e=>{const r=wrap.getBoundingClientRect();return Math.min(1,Math.max(0,(e.clientX-r.left)/r.width))*buf.duration};
+wrap.addEventListener('pointerdown',e=>{if(!buf)return;wrap.setPointerCapture(e.pointerId);dragging=true;anchor=tAt(e);sel=null;refresh()});
+wrap.addEventListener('pointermove',e=>{if(!dragging)return;const t=tAt(e);if(Math.abs(t-anchor)>0.02){sel={a:Math.min(anchor,t),b:Math.max(anchor,t)};['trim','cut'].forEach(i=>$(i).disabled=false);placeOverlay()}});
+wrap.addEventListener('pointerup',e=>{if(!dragging)return;dragging=false;if(!sel){cursor=anchor;if(playing){play()}}refresh()});
+
+/* ---------- volumen ---------- */
+function setLim(n,on){n.threshold.value=on?-2:0;n.knee.value=0;n.ratio.value=on?20:1;n.attack.value=0.003;n.release.value=0.12}
+function updGain(){
+  $('gv').textContent=Math.round(gain*100)+'%';
+  if(!buf)return;
+  const p=peakOf(buf),db=p>0?20*Math.log10(p*gain):-Infinity,lim=$('lim').checked;
+  $('peak').textContent='Pico actual: '+(isFinite(db)?db.toFixed(1)+' dBFS':'silencio')+' (0 dBFS es el máximo digital).';
+  $('warn').textContent=(p*gain>1)?(lim?'Hay picos sobre el máximo: el limitador los controlará.':'Cuidado: el audio se distorsionará. Activa el limitador o baja el volumen.'):'';
+  if(gnode)gnode.gain.value=gain;
+  if(comp)setLim(comp,lim);
+}
+$('gain').oninput=e=>{gain=e.target.value/100;draw();updGain()};
+$('lim').onchange=updGain;
+$('reset').onclick=()=>{gain=1;$('gain').value=100;draw();updGain()};
+$('norm').onclick=()=>{const p=peakOf(buf);if(!p)return;gain=Math.min(8,0.891/p);$('gain').value=Math.round(gain*100);draw();updGain()};
+
+/* ---------- reproducción ---------- */
+const curPos=()=>{const e=AC.currentTime-t0;if($('loop').checked&&sel){const L=sel.b-sel.a;return sel.a+(e%L)}return Math.min(endAt,off+e)};
+function play(){
+  stop();AC.resume();
+  const a=sel?sel.a:cursor,b=sel?sel.b:buf.duration;off=a;endAt=b;
+  src=AC.createBufferSource();src.buffer=buf;gnode=AC.createGain();gnode.gain.value=gain;comp=AC.createDynamicsCompressor();setLim(comp,$('lim').checked);
+  src.connect(gnode).connect(comp).connect(AC.destination);
+  if(sel&&$('loop').checked){src.loop=true;src.loopStart=a;src.loopEnd=b;src.start(0,a)}else src.start(0,a,Math.max(0.01,b-a));
+  src.onended=()=>{if(playing&&src){const s=src;if(s===src){playing=false;cursor=sel?sel.a:0;cancelAnimationFrame(raf);$('play').textContent='Reproducir';placeOverlay()}}};
+  t0=AC.currentTime;playing=true;$('play').textContent='Pausar';tick();
+}
+function tick(){placeOverlay();if(playing)raf=requestAnimationFrame(tick)}
+function stop(){
+  if(src){const s=src;src=null;s.onended=null;try{s.stop()}catch(e){}}
+  if(playing)cursor=curPos();
+  playing=false;cancelAnimationFrame(raf);gnode=null;comp=null;$('play').textContent='Reproducir';if(buf)placeOverlay();
+}
+$('play').onclick=()=>playing?stop():play();
+$('stop').onclick=()=>{stop();cursor=sel?sel.a:0;placeOverlay()};
+
+/* ---------- edición ---------- */
+$('trim').onclick=()=>{const[s,e]=range();commit(slice(buf,s,e))};
+$('cut').onclick=()=>{const[s,e]=range();if(s===0&&e===buf.length)return;commit(join(slice(buf,0,s),slice(buf,e,buf.length)).length?(e>=buf.length?slice(buf,0,s):s<=0?slice(buf,e,buf.length):join(slice(buf,0,s),slice(buf,e,buf.length))):buf)};
+function fade(inn){
+  const[s,e]=range(),n=Math.min(e-s,Math.floor(buf.sampleRate*2)),o=mk(buf.numberOfChannels,buf.length,buf.sampleRate);
+  for(let c=0;c<buf.numberOfChannels;c++){const d=new Float32Array(buf.getChannelData(c));
+    for(let i=0;i<n;i++){const k=i/n;if(inn)d[s+i]*=k;else d[e-1-i]*=k}o.copyToChannel(d,c)}
+  commit(o);
+}
+$('fin').onclick=()=>fade(true);$('fout').onclick=()=>fade(false);
+$('rev').onclick=()=>{
+  const[s,e]=range(),o=mk(buf.numberOfChannels,buf.length,buf.sampleRate);
+  for(let c=0;c<buf.numberOfChannels;c++){const d=new Float32Array(buf.getChannelData(c));d.subarray(s,e).reverse();o.copyToChannel(d,c)}
+  commit(o);
+};
+$('spd').onchange=async e=>{
+  const r=parseFloat(e.target.value);e.target.value='';if(!r)return;
+  const oc=new OfflineAudioContext(buf.numberOfChannels,Math.ceil(buf.length/r),buf.sampleRate),s=oc.createBufferSource();
+  s.buffer=buf;s.playbackRate.value=r;s.connect(oc.destination);s.start();
+  commit(await oc.startRendering());
+};
+$('undo').onclick=()=>{if(!undo.length)return;buf=undo.pop();sel=null;cols=null;stop();refresh()};
+
+/* ---------- exportar ---------- */
+function wav(b){
+  const ch=b.numberOfChannels,n=b.length,sr=b.sampleRate,out=new DataView(new ArrayBuffer(44+n*ch*2)),ws=(o,s)=>{for(let i=0;i<s.length;i++)out.setUint8(o+i,s.charCodeAt(i))};
+  ws(0,'RIFF');out.setUint32(4,36+n*ch*2,true);ws(8,'WAVEfmt ');out.setUint32(16,16,true);out.setUint16(20,1,true);out.setUint16(22,ch,true);out.setUint32(24,sr,true);out.setUint32(28,sr*ch*2,true);out.setUint16(32,ch*2,true);out.setUint16(34,16,true);ws(36,'data');out.setUint32(40,n*ch*2,true);
+  const d=[];for(let c=0;c<ch;c++)d.push(b.getChannelData(c));
+  let p=44;for(let i=0;i<n;i++)for(let c=0;c<ch;c++){const v=Math.max(-1,Math.min(1,d[c][i]));out.setInt16(p,v<0?v*32768:v*32767,true);p+=2}
+  return new Uint8Array(out.buffer);
+}
+const T=(()=>{const t=new Uint32Array(256);for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)c=c&1?0xEDB88320^(c>>>1):c>>>1;t[n]=c>>>0}return t})();
+const crc=u=>{let c=0xFFFFFFFF;for(let i=0;i<u.length;i++)c=T[(c^u[i])&255]^(c>>>8);return (c^0xFFFFFFFF)>>>0};
+function zip(name,data){
+  const nm=new TextEncoder().encode(name),c=crc(data),sz=data.length,l=new DataView(new ArrayBuffer(30)),cd=new DataView(new ArrayBuffer(46)),e=new DataView(new ArrayBuffer(22));
+  l.setUint32(0,0x04034b50,true);l.setUint16(4,20,true);l.setUint16(8,0,true);l.setUint32(14,c,true);l.setUint32(18,sz,true);l.setUint32(22,sz,true);l.setUint16(26,nm.length,true);
+  cd.setUint32(0,0x02014b50,true);cd.setUint16(4,20,true);cd.setUint16(6,20,true);cd.setUint32(16,c,true);cd.setUint32(20,sz,true);cd.setUint32(24,sz,true);cd.setUint16(28,nm.length,true);cd.setUint32(42,0,true);
+  const cdOff=30+nm.length+sz;
+  e.setUint32(0,0x06054b50,true);e.setUint16(8,1,true);e.setUint16(10,1,true);e.setUint32(12,46+nm.length,true);e.setUint32(16,cdOff,true);
+  return new Blob([l,nm,data,cd,nm,e]);
+}
+function mp3(b,kbps){
+  const ch=Math.min(2,b.numberOfChannels),enc=new lamejs.Mp3Encoder(ch,b.sampleRate,kbps),parts=[];
+  const cv=a=>{const o=new Int16Array(a.length);for(let i=0;i<a.length;i++){const v=Math.max(-1,Math.min(1,a[i]));o[i]=v<0?v*32768:v*32767}return o};
+  const L=cv(b.getChannelData(0)),R=ch>1?cv(b.getChannelData(1)):null;
+  for(let i=0;i<b.length;i+=1152){const l=L.subarray(i,i+1152),k=ch>1?enc.encodeBuffer(l,R.subarray(i,i+1152)):enc.encodeBuffer(l);if(k.length)parts.push(new Uint8Array(k))}
+  const f=enc.flush();if(f.length)parts.push(new Uint8Array(f));
+  const out=new Uint8Array(parts.reduce((s,p)=>s+p.length,0));let o=0;parts.forEach(p=>{out.set(p,o);o+=p.length});return out;
+}
+let dl=null;
+dl={save:async({filename,data})=>{const u=URL.createObjectURL(data),a=document.createElement('a');a.href=u;a.download=filename;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),5000)}};
+$('exp').onclick=async()=>{
+  if(!dl)return;
+  say('Procesando el audio con el volumen aplicado…');
+  try{
+    const f=$('fmt').value,isMp3=f.startsWith('mp3');
+    if(isMp3&&typeof lamejs==='undefined'){say('No se pudo cargar el codificador MP3. Revisa tu conexión o exporta en WAV.');return}
+    const sr0=buf.sampleRate,sr=(isMp3&&![8000,11025,12000,16000,22050,24000,32000,44100,48000].includes(sr0))?44100:sr0;
+    const oc=new OfflineAudioContext(buf.numberOfChannels,Math.ceil(buf.length*sr/sr0),sr),s=oc.createBufferSource(),g=oc.createGain(),c=oc.createDynamicsCompressor();
+    s.buffer=buf;g.gain.value=gain;setLim(c,$('lim').checked);s.connect(g).connect(c).connect(oc.destination);s.start();
+    const r=await oc.startRendering(),name=fname+'-volumen.'+(isMp3?'mp3':'wav');
+    say(isMp3?'Codificando MP3…':'Empaquetando…');await new Promise(res=>setTimeout(res,30));
+    const bytes=isMp3?mp3(r,parseInt(f.split('-')[1],10)):wav(r);
+    await dl.save({filename:name,data:new Blob([bytes],{type:isMp3?'audio/mpeg':'audio/wav'})});say('Listo: '+name+' se guardó en tu dispositivo.');
+  }catch(e){say(e&&e.code==='declined'?'Descarga cancelada.':'No se pudo exportar. Inténtalo de nuevo.')}
+};
+})();
+</script>
+</body>
+</html>
