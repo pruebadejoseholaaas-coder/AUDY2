@@ -137,6 +137,8 @@ async function load(f){
   stop();say('Leyendo el archivo…');
   try{
     const ab=await f.arrayBuffer();
+    say('Decodificando '+(f.size/1048576).toFixed(1)+' MB… los archivos grandes pueden tardar unos segundos.');
+    await new Promise(r=>setTimeout(r,30));
     buf=await AC.decodeAudioData(ab);
     fname=f.name.replace(/\.[^.]+$/,'')||'audio';
     undo=[];sel=null;cursor=0;gain=1;$('gain').value=100;cols=null;
@@ -150,8 +152,9 @@ const mk=(ch,len,sr)=>new AudioBuffer({numberOfChannels:ch,length:Math.max(1,len
 function slice(b,s,e){const o=mk(b.numberOfChannels,e-s,b.sampleRate);for(let c=0;c<b.numberOfChannels;c++)o.copyToChannel(b.getChannelData(c).subarray(s,e),c);return o}
 function join(a,b){const o=mk(a.numberOfChannels,a.length+b.length,a.sampleRate);for(let c=0;c<a.numberOfChannels;c++){o.copyToChannel(a.getChannelData(c),c,0);o.copyToChannel(b.getChannelData(c),c,a.length)}return o}
 function peakOf(b){let p=0;for(let c=0;c<b.numberOfChannels;c++){const d=b.getChannelData(c);for(let i=0;i<d.length;i++){const v=Math.abs(d[i]);if(v>p)p=v}}return p}
+let pkB=null,pkV=0;const peak=()=>{if(pkB!==buf){pkB=buf;pkV=peakOf(buf)}return pkV};
 const range=()=>{const sr=buf.sampleRate;return sel?[Math.floor(sel.a*sr),Math.floor(sel.b*sr)]:[0,buf.length]};
-function commit(nb){undo.push(buf);if(undo.length>15)undo.shift();buf=nb;sel=null;cursor=Math.min(cursor,buf.duration);cols=null;stop();refresh()}
+function commit(nb){undo.push(buf);const mx=buf.length*buf.numberOfChannels>3e7?2:10;while(undo.length>mx)undo.shift();buf=nb;sel=null;cursor=Math.min(cursor,buf.duration);cols=null;stop();refresh()}
 
 /* ---------- dibujo ---------- */
 const cv=$('cv'),wrap=$('wrap');
@@ -193,7 +196,7 @@ function setLim(n,on){n.threshold.value=on?-2:0;n.knee.value=0;n.ratio.value=on?
 function updGain(){
   $('gv').textContent=Math.round(gain*100)+'%';
   if(!buf)return;
-  const p=peakOf(buf),db=p>0?20*Math.log10(p*gain):-Infinity,lim=$('lim').checked;
+  const p=peak(),db=p>0?20*Math.log10(p*gain):-Infinity,lim=$('lim').checked;
   $('peak').textContent='Pico actual: '+(isFinite(db)?db.toFixed(1)+' dBFS':'silencio')+' (0 dBFS es el máximo digital).';
   $('warn').textContent=(p*gain>1)?(lim?'Hay picos sobre el máximo: el limitador los controlará.':'Cuidado: el audio se distorsionará. Activa el limitador o baja el volumen.'):'';
   if(gnode)gnode.gain.value=gain;
@@ -202,7 +205,7 @@ function updGain(){
 $('gain').oninput=e=>{gain=e.target.value/100;draw();updGain()};
 $('lim').onchange=updGain;
 $('reset').onclick=()=>{gain=1;$('gain').value=100;draw();updGain()};
-$('norm').onclick=()=>{const p=peakOf(buf);if(!p)return;gain=Math.min(8,0.891/p);$('gain').value=Math.round(gain*100);draw();updGain()};
+$('norm').onclick=()=>{const p=peak();if(!p)return;gain=Math.min(8,0.891/p);$('gain').value=Math.round(gain*100);draw();updGain()};
 
 /* ---------- reproducción ---------- */
 const curPos=()=>{const e=AC.currentTime-t0;if($('loop').checked&&sel){const L=sel.b-sel.a;return sel.a+(e%L)}return Math.min(endAt,off+e)};
@@ -252,7 +255,7 @@ function wav(b){
   const ch=b.numberOfChannels,n=b.length,sr=b.sampleRate,out=new DataView(new ArrayBuffer(44+n*ch*2)),ws=(o,s)=>{for(let i=0;i<s.length;i++)out.setUint8(o+i,s.charCodeAt(i))};
   ws(0,'RIFF');out.setUint32(4,36+n*ch*2,true);ws(8,'WAVEfmt ');out.setUint32(16,16,true);out.setUint16(20,1,true);out.setUint16(22,ch,true);out.setUint32(24,sr,true);out.setUint32(28,sr*ch*2,true);out.setUint16(32,ch*2,true);out.setUint16(34,16,true);ws(36,'data');out.setUint32(40,n*ch*2,true);
   const d=[];for(let c=0;c<ch;c++)d.push(b.getChannelData(c));
-  let p=44;for(let i=0;i<n;i++)for(let c=0;c<ch;c++){const v=Math.max(-1,Math.min(1,d[c][i]));out.setInt16(p,v<0?v*32768:v*32767,true);p+=2}
+  const pcm=new Int16Array(out.buffer,44,n*ch);let k=0;for(let i=0;i<n;i++)for(let c=0;c<ch;c++){const v=d[c][i];pcm[k++]=v>=1?32767:v<=-1?-32768:v<0?v*32768:v*32767}
   return new Uint8Array(out.buffer);
 }
 const T=(()=>{const t=new Uint32Array(256);for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)c=c&1?0xEDB88320^(c>>>1):c>>>1;t[n]=c>>>0}return t})();
@@ -265,11 +268,11 @@ function zip(name,data){
   e.setUint32(0,0x06054b50,true);e.setUint16(8,1,true);e.setUint16(10,1,true);e.setUint32(12,46+nm.length,true);e.setUint32(16,cdOff,true);
   return new Blob([l,nm,data,cd,nm,e]);
 }
-function mp3(b,kbps){
+async function mp3(b,kbps){
   const ch=Math.min(2,b.numberOfChannels),enc=new lamejs.Mp3Encoder(ch,b.sampleRate,kbps),parts=[];
   const cv=a=>{const o=new Int16Array(a.length);for(let i=0;i<a.length;i++){const v=Math.max(-1,Math.min(1,a[i]));o[i]=v<0?v*32768:v*32767}return o};
   const L=cv(b.getChannelData(0)),R=ch>1?cv(b.getChannelData(1)):null;
-  for(let i=0;i<b.length;i+=1152){const l=L.subarray(i,i+1152),k=ch>1?enc.encodeBuffer(l,R.subarray(i,i+1152)):enc.encodeBuffer(l);if(k.length)parts.push(new Uint8Array(k))}
+  for(let i=0;i<b.length;i+=1152){if(i%(1152*300)===0){say('Codificando MP3… '+Math.round(i/b.length*100)+'%');await new Promise(r=>setTimeout(r,0))}const l=L.subarray(i,i+1152),k=ch>1?enc.encodeBuffer(l,R.subarray(i,i+1152)):enc.encodeBuffer(l);if(k.length)parts.push(new Uint8Array(k))}
   const f=enc.flush();if(f.length)parts.push(new Uint8Array(f));
   const out=new Uint8Array(parts.reduce((s,p)=>s+p.length,0));let o=0;parts.forEach(p=>{out.set(p,o);o+=p.length});return out;
 }
@@ -286,7 +289,7 @@ $('exp').onclick=async()=>{
     s.buffer=buf;g.gain.value=gain;setLim(c,$('lim').checked);s.connect(g).connect(c).connect(oc.destination);s.start();
     const r=await oc.startRendering(),name=fname+'-volumen.'+(isMp3?'mp3':'wav');
     say(isMp3?'Codificando MP3…':'Empaquetando…');await new Promise(res=>setTimeout(res,30));
-    const bytes=isMp3?mp3(r,parseInt(f.split('-')[1],10)):wav(r);
+    const bytes=isMp3?await mp3(r,parseInt(f.split('-')[1],10)):wav(r);
     await dl.save({filename:name,data:new Blob([bytes],{type:isMp3?'audio/mpeg':'audio/wav'})});say('Listo: '+name+' se guardó en tu dispositivo.');
   }catch(e){say(e&&e.code==='declined'?'Descarga cancelada.':'No se pudo exportar. Inténtalo de nuevo.')}
 };
