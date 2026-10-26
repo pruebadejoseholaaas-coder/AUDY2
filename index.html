@@ -3,13 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Subir volumen – editor de audio</title>
+<title>Alto – sube el volumen de tu audio</title>
 <link href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@400;600;700&display=swap" rel="stylesheet">
 <style>
-:root{--bg:#e9ece4;--panel:#f6f7f2;--ink:#1d2a24;--mute:#5d6b63;--line:#c9cfc3;--wave:#2f6f5e;--hot:#d6402b;--sel:rgba(47,111,94,.22);--btn:#1d2a24;--btnink:#f6f7f2;
-box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);color-scheme:light}
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#121815;--panel:#1b241f;--ink:#e6ebe4;--mute:#92a097;--line:#2f3b34;--wave:#5fc2a3;--hot:#ff6a52;--sel:rgba(95,194,163,.25);--btn:#e6ebe4;--btnink:#121815;color-scheme:dark}}
-:root[data-theme="dark"]{--bg:#121815;--panel:#1b241f;--ink:#e6ebe4;--mute:#92a097;--line:#2f3b34;--wave:#5fc2a3;--hot:#ff6a52;--sel:rgba(95,194,163,.25);--btn:#e6ebe4;--btnink:#121815;color-scheme:dark}
+:root{--bg:#05070d;--panel:#0b1530;--ink:#e8eefc;--mute:#8aa0c8;--line:#1b2b55;--wave:#4da3ff;--hot:#ff5a4a;--sel:rgba(77,163,255,.22);--btn:#2f7bff;--btnink:#fff;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);color-scheme:dark}
+:root[data-theme="dark"],:root[data-theme="light"]{--bg:#05070d}
 html{scroll-padding-top:env(safe-area-inset-top,0px)}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);font:400 16px/1.5 "Familjen Grotesk",system-ui,sans-serif}
@@ -39,10 +38,23 @@ input[type=range]{width:100%;accent-color:var(--wave)}
 #msg{min-height:24px;color:var(--mute)}
 label.chk{display:flex;gap:8px;align-items:center}
 .hide{display:none}
+
+body{background:radial-gradient(900px 480px at 85% -8%,#0f2a63 0%,transparent 62%),radial-gradient(700px 400px at -10% 110%,#0a1a40 0%,transparent 60%),var(--bg);background-attachment:fixed}
+.brand{display:flex;align-items:center;gap:12px;margin:6px 0 22px}
+.brand span{font-size:28px;font-weight:700;letter-spacing:.04em}
+.brand small{display:block;font-size:13px;font-weight:400;color:var(--mute);letter-spacing:0;margin-top:-4px}
+.card{background:linear-gradient(180deg,#0e1b3d,#0a1330);border-color:var(--line);box-shadow:0 14px 34px rgba(0,0,0,.5)}
+#wrap{background:#030713;border:1px solid var(--line);border-radius:8px}
+button{background:#0f1d42;border-color:#223768}
+button:hover:not(:disabled){border-color:var(--wave)}
+button.main{background:linear-gradient(180deg,#3d8bff,#1f5fe0);border-color:#4d96ff;color:#fff}
+#head{background:#fff}
+h1{background:linear-gradient(180deg,#fff,#9fc4ff);-webkit-background-clip:text;background-clip:text;color:transparent}
 </style>
 </head>
 <body>
 <main>
+<header class="brand"><svg width="52" height="52" viewBox="0 0 64 64" role="img" aria-label="Logo de Alto"><defs><linearGradient id="lg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#17387a"/><stop offset="1" stop-color="#02040a"/></linearGradient><linearGradient id="lb" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="#2f7bff"/><stop offset="1" stop-color="#9ad7ff"/></linearGradient></defs><rect x="1" y="1" width="62" height="62" rx="16" fill="url(#lg)" stroke="#2a4a94"/><g fill="url(#lb)"><rect x="12" y="36" width="8" height="16" rx="4"/><rect x="22" y="28" width="8" height="24" rx="4"/><rect x="32" y="19" width="8" height="33" rx="4"/><rect x="42" y="10" width="8" height="42" rx="4"/></g></svg><div><span>Alto</span><small>Editor de audio con más volumen</small></div></header>
 <h1>Sube el volumen de cualquier audio</h1>
 <p class="sub">Carga un archivo, súbele el volumen sin que se distorsione, edítalo y expórtalo. Todo ocurre en tu dispositivo: el audio no se sube a ningún servidor.</p>
 
